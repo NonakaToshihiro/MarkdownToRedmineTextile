@@ -1,0 +1,2 @@
+# MarkdownToRedmineTextile
+生成AIが出力するMarkdownをRedmineのtextile形式に変換するVSCodeのタスク
