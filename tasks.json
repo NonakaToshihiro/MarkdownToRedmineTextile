@@ -1,0 +1,22 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Convert to Redmine Textile",
+            "type": "shell",
+            "command": "pandoc",
+            "args": [
+                "${file}",
+                "-o",
+                "${fileDirname}/${fileBasenameNoExtension}.textile",
+                "--to=textile",
+                "--lua-filter=C:/path/to/forRedmineTextile.lua"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": []
+        }
+    ]
+}
