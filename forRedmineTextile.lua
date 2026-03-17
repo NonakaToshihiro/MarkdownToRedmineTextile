@@ -33,6 +33,46 @@ local function render_block(block)
     return '<pre><code' .. attr .. '>' .. block.text .. '</code></pre>'
   elseif block.t == "HorizontalRule" then
     return "---"
+  elseif block.t == "Table" then
+    -- Pandoc AST にはセパレーター行（| --- | --- |）が含まれないため、
+    -- そのまま行を出力するだけで自然に除外される
+    local lines = {}
+
+    -- ヘッダー行
+    if block.head and block.head.rows then
+      for _, row in ipairs(block.head.rows) do
+        local cells = {}
+        for _, cell in ipairs(row.cells) do
+          local t = ""
+          for _, b in ipairs(cell.content) do
+            t = t .. render_block(b)
+          end
+          cells[#cells + 1] = t
+        end
+        lines[#lines + 1] = "| " .. table.concat(cells, " | ") .. " |"
+      end
+    end
+
+    -- ボディ行
+    if block.bodies then
+      for _, tbody in ipairs(block.bodies) do
+        if tbody.body then
+          for _, row in ipairs(tbody.body) do
+            local cells = {}
+            for _, cell in ipairs(row.cells) do
+              local t = ""
+              for _, b in ipairs(cell.content) do
+                t = t .. render_block(b)
+              end
+              cells[#cells + 1] = t
+            end
+            lines[#lines + 1] = "| " .. table.concat(cells, " | ") .. " |"
+          end
+        end
+      end
+    end
+
+    return table.concat(lines, "\n")
   else
     return pandoc.utils.stringify(block)
   end
