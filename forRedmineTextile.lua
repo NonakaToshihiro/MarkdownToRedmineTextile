@@ -15,6 +15,9 @@ local function render_inlines(inlines)
     elseif el.t == "Code" then res = res .. " @" .. el.text .. "@ "
     -- リンク ("text":url)
     elseif el.t == "Link" then res = res .. ' "' .. render_inlines(el.content) .. '":' .. el.target
+    -- HTML <br> をそのまま保持（テーブルセル内の改行など）
+    elseif el.t == "RawInline" then
+      if el.format == "html" and el.text:match("<br") then res = res .. "<br>" end
     else res = res .. pandoc.utils.stringify(el) end
   end
   -- 連続するスペースを整理
@@ -36,40 +39,76 @@ local function render_block(block)
   elseif block.t == "Table" then
     -- Pandoc AST にはセパレーター行（| --- | --- |）が含まれないため、
     -- そのまま行を出力するだけで自然に除外される
-    local lines = {}
+    local num_cols = #block.colspecs
 
-    -- ヘッダー行
+    -- セル内の複数ブロックを <br> で結合
+    local function render_cell(cell)
+      local parts = {}
+      for _, b in ipairs(cell.content) do
+        local s = render_block(b)
+        if s ~= "" then parts[#parts + 1] = s end
+      end
+      return table.concat(parts, "<br>")
+    end
+
+    -- 行のセルを配列として返す（列数に満たない場合は空セルで補完）
+    local function render_row_cells(row)
+      local cells = {}
+      for _, cell in ipairs(row.cells) do
+        cells[#cells + 1] = render_cell(cell)
+      end
+      while #cells < num_cols do cells[#cells + 1] = "" end
+      return cells
+    end
+
+    -- 継続行の判定：2列目以降がすべて空
+    -- Pandoc のパイプテーブルは1行1セルのため、改行を含む行は
+    -- 別行として切り出され、続く列がすべて空になる
+    local function is_continuation_row(cells)
+      for i = 2, #cells do
+        if cells[i] ~= "" then return false end
+      end
+      return true
+    end
+
+    local all_rows = {}
+
     if block.head and block.head.rows then
       for _, row in ipairs(block.head.rows) do
-        local cells = {}
-        for _, cell in ipairs(row.cells) do
-          local t = ""
-          for _, b in ipairs(cell.content) do
-            t = t .. render_block(b)
-          end
-          cells[#cells + 1] = t
-        end
-        lines[#lines + 1] = "| " .. table.concat(cells, " | ") .. " |"
+        all_rows[#all_rows + 1] = render_row_cells(row)
       end
     end
 
-    -- ボディ行
     if block.bodies then
       for _, tbody in ipairs(block.bodies) do
         if tbody.body then
           for _, row in ipairs(tbody.body) do
-            local cells = {}
-            for _, cell in ipairs(row.cells) do
-              local t = ""
-              for _, b in ipairs(cell.content) do
-                t = t .. render_block(b)
-              end
-              cells[#cells + 1] = t
-            end
-            lines[#lines + 1] = "| " .. table.concat(cells, " | ") .. " |"
+            all_rows[#all_rows + 1] = render_row_cells(row)
           end
         end
       end
+    end
+
+    -- 継続行を前の行の最終セルにマージ
+    local merged = {}
+    for _, cells in ipairs(all_rows) do
+      if #merged > 0 and is_continuation_row(cells) and cells[1] ~= "" then
+        local prev = merged[#merged]
+        local last_idx = #prev
+        while last_idx > 0 and prev[last_idx] == "" do last_idx = last_idx - 1 end
+        if last_idx == 0 then last_idx = #prev end
+        -- 前セル末尾と継続セル先頭の重複 <br> を正規化して結合
+        local prev_s = prev[last_idx]:gsub("<br>%s*$", "")
+        local cont_s = cells[1]:gsub("^<br>%s*", "")
+        prev[last_idx] = prev_s .. "<br>" .. cont_s
+      else
+        merged[#merged + 1] = cells
+      end
+    end
+
+    local lines = {}
+    for _, cells in ipairs(merged) do
+      lines[#lines + 1] = "| " .. table.concat(cells, " | ") .. " |"
     end
 
     return table.concat(lines, "\n")
