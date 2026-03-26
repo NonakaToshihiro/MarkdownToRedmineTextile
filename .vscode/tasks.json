@@ -4,13 +4,14 @@
         {
             "label": "Convert to Redmine Textile",
             "type": "shell",
-            "command": "pandoc",
+            "command": "pwsh",
             "args": [
-                "${file}",
-                "-o",
-                "${fileDirname}/${fileBasenameNoExtension}.textile",
-                "--to=textile",
-                "--lua-filter=C:/path/to/forRedmineTextile.lua"
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                "${workspaceFolder}/convert-to-redmine.ps1",
+                "${file}"
             ],
             "group": {
                 "kind": "build",
